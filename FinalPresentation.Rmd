@@ -1,0 +1,137 @@
+---
+title: "Untitled"
+author: "Aymen Khouja"
+date: "15/03/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+The object of this study is to search for the facebook page, instagram, linkedin and websites of various entreprises using an automated process also called “webscrapping algorithm” For this study we will be needing these specific libraries especially rvest as it is the most crucial tool for the webscraping process. Httr package also allows to build the much needed urls and thus also crucial to the success of the study.
+
+
+```{r, message=FALSE}
+library(readxl)
+library(tidyverse) 
+library(rvest)
+library(dplyr)
+library(httr)
+library(curl)
+```
+
+## Loading and viewing the dataset
+
+The dataset is a single variable dataset presenting a set of entreprises.
+
+```{r}
+Customer_list <- read_excel("Customer_list.xlsx")
+print(Customer_list)
+```
+
+## Creating the scraper function: 
+We will be creating a function that will be doing all the work for us, this function called 'scraper' gets as an argument the type of page we would like to scrape and magically produce a vector full of the scraped pages, it is as simple as that.
+The function does different instructions depending on the function argument.
+
+```{r}
+scraper<-function(a){
+  
+    a <- as.character(a)
+    pages <- vector()
+    for (Customer in Customer_list$Customer_name) {
+      
+      query <- paste(Customer,a,sep="+")
+      url <- parse_url("google.com/search?client=firefox-b-d&")  
+      url$scheme <- "https"
+      url$query <- list(q=query)
+      url <- build_url(url)
+      url
+      page <- read_html(curl(url, handle = curl::new_handle("useragent" = "Mozilla/5.0")))
+      
+      error_message <- paste(a,"Not found", sep=" ")
+        a_link <- paste(a,"com/",sep=".")
+        links <- page %>% html_nodes("div > div:nth-child(1) a:first-child") %>% html_attr("href") 
+        links <- gsub('/url\\?q=','',sapply(strsplit(links[as.vector(grep('url',links))],split='&'),'[',1))
+        links <- as.vector(links)
+      for(link in links){
+        if(a=="facebook"){
+          if(grepl('google',link) | grepl(a_link,link)==FALSE | grepl('public',link) | grepl('people', link) | grepl('groups', link) | grepl('posts', link) | grepl('photo', link)){links<-links[!links %in% c(link)]}
+        }
+        else if(a=="instagram"){
+          if(grepl('google',link) | grepl(a_link,link)==FALSE){links<-links[!links %in% c(link)]}
+        }
+        else if(a=="linkedin"){
+          if(grepl('google',link) | grepl(a_link,link)==FALSE | grepl('company',link)==FALSE){links<-links[!links %in% c(link)]}
+        }
+        else if(a=="website"){
+          if(grepl('google',link)){links<-links[!links %in% c(link)]}
+          if(grepl("linkedin",links[1]) | grepl("facebook",links[1]) | grepl("societe",links[1]) | grepl("dnb",links[1]) | grepl("instagram", links[1])){
+            links[1]<-"website Not found"
+            
+          }
+        }
+      }
+        if(length(links)==0){pages<-append(pages, error_message)} else{pages<-append(pages,links[1])}
+    }
+    pages
+}
+```
+## Scavanging the internet for the facebook, instagram, linkedin and Websites of the selected entreprises: 
+Getting the required pages is as simple as passing each desired type of page as argument, the code thus is as follows: 
+### Facebook:
+```{r}
+facebook <-scraper("facebook")
+facebook
+```
+
+### Linkedin:
+```{r}
+linkedin <-scraper("linkedin")
+linkedin
+```
+### Instagram:
+```{r}
+instagram <-scraper("instagram")
+instagram
+```
+### Websites:
+```{r}
+websites <-scraper("website")
+websites
+
+```
+## Scavanging the internet for the logos:
+The final step needed is for us to look for the logos, which will be done using a function similar to the scraper function but one that looks for the logos instead.
+```{r}
+logo_scraper <- function(){
+  logos<-vector()
+  for(i in 1:100){
+    if(websites[i]!= "website Not found"){
+      query<-paste(gsub(" ", "+", Customer_list$Customer_name[i]),"logo",sep="+")
+      url <- paste("https://www.google.com/search?tbm=isch&q=",query,sep="")
+      url
+      page<-read_html(curl(url, handle = curl::new_handle("useragent" = "Mozilla/5.0")))
+      links <- page %>% html_nodes(xpath="//img") %>% html_attr("src") 
+      links
+      logos<-append(logos,links[2])
+    }else{logos<-append(logos,"Logo Not found")}
+  }
+  logos
+}
+logos<-logo_scraper()
+```
+## Saving our findings in a dataframe: 
+Now that we have every information needed, we are going to put it our collected data in a coherent dataframe for it to be properly visualized later on. 
+```{r}
+scraped_data<-data.frame(logos,Customer_list$Customer_name,websites,linkedin,facebook,instagram)
+scraped_data
+```
+## Converting our dataframe to a csv file: 
+The final and perhaps most crucial step is to convert our dataframe into a csv file that will allow us to import our data into PowerBI to visualize the data in an interactive dashboard. 
+```{r}
+library(writexl)
+write_xlsx(scraped_data,"AtelierStatFinalData.xlsx")
+write.csv(scraped_data,"AtelierStatFinalData.csv", row.names = FALSE)
+```
